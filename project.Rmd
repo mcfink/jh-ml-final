@@ -1,0 +1,73 @@
+---
+title: "Machine Learning Project"
+author: "Mike Fink"
+date: "November 6, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+```
+
+
+## Step 1: Load the data
+```{r eval=FALSE}
+raw_testing <- read.csv2('pml-testing.csv', header = TRUE, sep = ',')
+
+raw_training <- read.csv2('pml-training.csv', header = TRUE, sep = ',')
+```
+
+## Step 2: Clean the training dataset
+There seemed to be a bit of an issue with not all rows containing a proper 'classe' variable, so I took out all the rows that lacked an acceptable entry for 'classe':
+```{r eval=FALSE}
+training <- raw_training[raw_training$classe %in% c('A', 'B', 'C', 'D', 'E'),]
+
+## making sure the values are all being treated as numeric
+sub_training_num <- data.frame(sapply( training, as.numeric ))
+
+```
+
+## Step 3: Dropping columns
+There are a lot of columns in this dataset.  I assumed that many of these columns were unimportant or were going to be difficult to deal with.  I threw these columns out before proceeding.  The columns included those with lots of NA values and columns that were unlikely to be good indicators 'in the wild' like username.  Finally, after discovering that the random forest method was going to take a very long time if I used all the variables, I selected a subset of the variables to do a random forest on:  (A quick note on how I chose my variables -- I thought that if the acceleration of each part of the arm, the weight, and the 'belt' were correct, it was going to be very unlikely that the exercise was done incorrectly!)
+```{r eval=FALSE}
+to_drop <- c('x', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 
+             'cvtd_timestamp', 'new_window', 'num_window', 'classe')
+sub_training_factors <- training[, -which(names(training) %in% to_drop)]
+
+sub_training_num  <- sub_training_num[, colSums(is.na(sub_training_num)) == 0]
+
+specific_train_cols <- c('classe', 'accel_belt_x', 'accel_belt_y', 'accel_belt_z',
+                         'accel_forearm_x', 'accel_forearm_y', 'accel_forearm_z',
+                         'roll_forearm', 'total_accel_dumbbell', 'accel_arm_x',
+                         'accel_arm_y', 'accel_arm_z')
+
+specific_training_set <- sub_training_num[,specific_train_cols]
+
+
+
+```
+
+## Step 4: Choose a couple of techniques and train the models
+After a bit of consideration, I decided to try a random forest approach and a boosting model.  I have previously used this technique to try and predict patient outcomes based off of many, many columns of data with moderate success, so, having many columns of data in this case, I elected to try it again and see if I might have success with that technique here.
+
+```{r eval=FALSE}
+t_predict <- train(classe~., method='rf', data=specific_training_set)
+b_predict <- train(classe~., method='gbm', data=specific_training_set)
+
+## combine the predictors
+s_predict <- train(classe~t_predict+b_predict, data=specific_training_set)
+  
+```
+
+## Step 5: Check out the confusion matrix for the training set
+```{r eval=FALSE}
+confusionMatrix(s_predict)
+```
+
+## Step 6: Apply the model to the test set (and hopefully pass the test!)
+I've prepared the specific testing set in the same manner and isolated the columns we care about, now I'm going to use the combined model to help me pass the test (I didn't pass the test the first time, because I chose inappropriate columns, but passed easily with the columns shown in this file.)
+```{r eval=FALSE}
+final_predict <- predict(s_predict, specific_testing_set)
+```
+
